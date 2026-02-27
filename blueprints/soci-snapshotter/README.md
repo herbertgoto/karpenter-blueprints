@@ -69,7 +69,7 @@ Those commands creates the following:
 
 The SOCI snapshotter `EC2NodeClass` configuration have several configuration parameters that affect SOCI parallel mode performance.
 
-The `blockDeviceMapping` field is used to increase root volume EBS performance and storage size.
+The `blockDeviceMapping` field is used to increase root volume EBS performance and storage size. The `instanceStorePolicy: RAID0` tells Karpenter to automatically configure a `RAID-0` array from all available NVMe instance store disks on the node. It then moves `/var/lib/containerd`, `/var/lib/kubelet`, and `/var/log/pods` to that array and symlinks them back.
 As SOCI parallel mode downloads layers, it buffers them on disk instead of in-memory, having a high performant storage subsystem is crucial to support it as well as enough storage to hold the container images.
 The example configure the root volume with IOPs of 16,000 and throughput of 1,000MiB/s which is the maximum for GP3, it is recommended that you modify those settings accordingly to trade-off between performance and cost.
 > ***NOTE***: From our benchmarks, we have also seen a good starting point by setting the throughput to 600MiB/s and keeping base IOPs to 3,000.
@@ -85,6 +85,7 @@ metadata:
 ...
 ...
 spec:
+  instanceStorePolicy: RAID0
   blockDeviceMappings:
   - deviceName: /dev/xvda
     ebs:
@@ -109,6 +110,7 @@ metadata:
 ...
 ...
 spec:
+  instanceStorePolicy: RAID0
   blockDeviceMappings:
     - deviceName: /dev/xvda
       ebs:
@@ -145,7 +147,7 @@ As installing a snapshotter to containerd and EKS requires several configuration
 <details>
 <summary>Amazon Linux 2023</summary>
 
-SOCI snapshotter parallel mode can be enabled in AL2023 through featureGate named "FastImagePull", in AL2023 we use [`NodeConfig`](https://awslabs.github.io/amazon-eks-ami/nodeadm/doc/examples/#enabling-fast-image-pull-experimental) simplify various data plane configurations.
+SOCI snapshotter parallel mode can be enabled in AL2023 through featureGate named "FastImagePull", in AL2023 we use [`NodeConfig`](https://awslabs.github.io/amazon-eks-ami/nodeadm/doc/examples/#enabling-fast-image-pull-experimental) simplify various data plane configurations. The SOCI configuration values are the default ones, but we left it as guidance in case you want to override them. 
 
 
 ```yaml
@@ -159,11 +161,28 @@ spec:
 ...
 ...
   userData: |
+    MIME-Version: 1.0
+    Content-Type: multipart/mixed; boundary="BOUNDARY"
+
+    --BOUNDARY
+    Content-Type: application/node.eks.aws
+
+    ---
     apiVersion: node.eks.aws/v1alpha1
     kind: NodeConfig
     spec:
       featureGates:
         FastImagePull: true
+      containerd:
+        config: |
+          [plugins."io.containerd.snapshotter.v1.soci"]
+            [plugins."io.containerd.snapshotter.v1.soci".blob]
+              max_concurrent_downloads_per_image = 20
+              concurrent_download_chunk_size = "16mb"
+              max_concurrent_unpacks_per_image = 12
+              discard_unpacked_layers = true
+
+    --BOUNDARY--
 ```
 
 Modifying SOCI snapshotter parallel mode configuration in AL2023 requires modifying the `/etc/soci-snapshotter-grpc/config.toml` file, this can be achieved by a `userData` script as additional to the `NodeConfig` configuration.
@@ -227,17 +246,20 @@ spec:
   userData: |
     [settings.container-runtime]
     snapshotter = "soci"
+    
     [settings.container-runtime-plugins.soci-snapshotter]
     pull-mode = "parallel-pull-unpack"
+    
     [settings.container-runtime-plugins.soci-snapshotter.parallel-pull-unpack]
     max-concurrent-downloads-per-image = 20
     concurrent-download-chunk-size = "16mb"
     max-concurrent-unpacks-per-image = 12
     discard-unpacked-layers = true
+
     [settings.bootstrap-commands.k8s-ephemeral-storage]
     commands = [
         ["apiclient", "ephemeral-storage", "init"],
-        ["apiclient", "ephemeral-storage" ,"bind", "--dirs", "/var/lib/containerd", "/var/lib/kubelet", "/var/log/pods", "/var/lib/soci-snapshotter"]
+        ["apiclient", "ephemeral-storage" ,"bind", "--dirs", "/var/lib/soci-snapshotter"]
     ]
     essential = true
     mode = "always"
