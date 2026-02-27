@@ -89,7 +89,7 @@ metadata:
 spec:
   amiSelectorTerms:
     - alias: bottlerocket@latest
-  role: "karpenter-blueprints"
+  role: "<<KARPENTER_NODE_IAM_ROLE_NAME>>"
   instanceStorePolicy: RAID0
   blockDeviceMappings:
     - deviceName: /dev/xvda
@@ -106,10 +106,10 @@ spec:
         encrypted: true
   securityGroupSelectorTerms:
   - tags:
-      karpenter.sh/discovery: "karpenter-blueprints"
+      karpenter.sh/discovery: "<<CLUSTER_NAME>>"
   subnetSelectorTerms:
   - tags:
-      karpenter.sh/discovery: "karpenter-blueprints"
+      karpenter.sh/discovery: "<<CLUSTER_NAME>>"
   userData: |
     [settings.container-runtime]
     snapshotter = "soci"
@@ -176,7 +176,7 @@ metadata:
 spec:
   amiSelectorTerms:
     - alias: al2023@latest
-  role: "karpenter-blueprints"
+  role: "<<KARPENTER_NODE_IAM_ROLE_NAME>>"
   blockDeviceMappings:
   - deviceName: /dev/xvda
     ebs:
@@ -186,10 +186,10 @@ spec:
       iops: 16000
   securityGroupSelectorTerms:
   - tags:
-      karpenter.sh/discovery: "karpenter-blueprints"
+      karpenter.sh/discovery: "<<CLUSTER_NAME>>"
   subnetSelectorTerms:
   - tags:
-      karpenter.sh/discovery: "karpenter-blueprints"
+      karpenter.sh/discovery: "<<CLUSTER_NAME>>"
 ---
 apiVersion: karpenter.sh/v1
 kind: NodePool
